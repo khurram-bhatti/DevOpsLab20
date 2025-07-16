@@ -1,4 +1,4 @@
-name: Build and Deploy Frontend
+name: Build, Cache, Deploy, and Publish Frontend
 
 on:
   push:
@@ -26,10 +26,24 @@ jobs:
         username: ${{ env.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Build and push Docker image
-      run: |
-        docker build -t $DOCKER_USERNAME/$APP_NAME:$IMAGE_TAG ./frontend
-        docker push $DOCKER_USERNAME/$APP_NAME:$IMAGE_TAG
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and push Docker image with caching
+      uses: docker/build-push-action@v6
+      with:
+        context: ./${{ env.APP_NAME }}
+        push: true
+        tags: ${{ env.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
+        cache-from: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ env.APP_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ env.APP_NAME }}:buildcache,mode=max
+        outputs: type=docker,dest=/tmp/${{ env.APP_NAME }}.tar
+
+    - name: Upload Docker image as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-image-${{ env.IMAGE_TAG }}
+        path: /tmp/${{ env.APP_NAME }}.tar
 
     - name: Clone GitOps repo
       run: git clone https://x-access-token:${{ secrets.GH_TOKEN }}@$GITOPS_REPO
